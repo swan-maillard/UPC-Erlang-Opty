@@ -2,12 +2,15 @@
 
 # Runs experiments with different parameters and parses the output of the erl program
 
-import subprocess
-import re
+from collections import defaultdict
 import os
+import subprocess
+from itertools import chain
+import pickle
+import re
 import numpy as np
 from matplotlib import pyplot as plt
-import tqdm
+from tqdm import tqdm
 
 from dataclasses import dataclass
 
@@ -36,13 +39,15 @@ class Result:
     clients: list[ClientResult]
 
 
-def run_erl(n_clients, n_entries, n_reads, n_writes, max_time):
-    cmd = f'erl -noshell -eval "opty:start({n_clients}, {n_entries}, {n_reads}, {n_writes}, {max_time})." -s init stop'
+def _run_erl(
+    n_clients: int, n_entries: int, n_reads: int, n_writes: int, max_time_ms: int
+):
+    cmd = f'erl -noshell -eval "opty:start({n_clients}, {n_entries}, {n_reads}, {n_writes}, {max_time_ms})." -s init stop'
     out = subprocess.check_output(cmd, shell=True)
     return out.decode("utf-8")
 
 
-def parse_erl_output(output: str) -> list[ClientResult]:
+def _parse_erl_output(output: str) -> list[ClientResult]:
     lines = output.split("\n")
     clients = []
     for line in lines:
@@ -57,7 +62,9 @@ def parse_erl_output(output: str) -> list[ClientResult]:
     return clients
 
 
-def run_experiment(n_clients, n_entries, n_reads, n_writes, max_time) -> Result:
+def run_experiment(
+    n_clients: int, n_entries: int, n_reads: int, n_writes: int, max_time_ms: int
+) -> Result:
     """Run the experiment.
 
     Args:
@@ -68,9 +75,57 @@ def run_experiment(n_clients, n_entries, n_reads, n_writes, max_time) -> Result:
         max_time (int): Duration of the experiment (in secs)
     """
 
-    output = run_erl(n_clients, n_entries, n_reads, n_writes, max_time)
-    clients = parse_erl_output(output)
-    return Result(n_clients, n_entries, n_reads, n_writes, max_time, clients)
+    output = _run_erl(n_clients, n_entries, n_reads, n_writes, max_time_ms)
+    clients = _parse_erl_output(output)
+    return Result(n_clients, n_entries, n_reads, n_writes, max_time_ms, clients)
+
+
+def plot_experiment(
+    xs: list[float],
+    data: list[float],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    filename: str,
+):
+    plt.figure()
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.plot(xs, data)
+    plt.savefig(f"{PLOT_DIR}/{filename}.png")
+
+
+def plot_multistep_experiment(
+    xs: list[float],
+    data: list[list[float]],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    filename: str,
+):
+    means = [np.mean(d) for d in data]
+    standard_derivations = [np.sqrt(np.var(d)) for d in data]
+    plt.figure()
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.scatter(
+        list(chain(*[[xs[i] for _ in d] for (i, d) in enumerate(data)])),
+        list(chain(*data)),
+        marker="x",
+        s=2,
+    )
+    plt.plot(xs, means, label="mean")
+    plt.fill_between(
+        xs,
+        np.array(means) - np.array(standard_derivations),
+        np.array(means) + np.array(standard_derivations),
+        alpha=0.5,
+        label="standard derivation",
+    )
+    plt.legend()
+    plt.savefig(f"{PLOT_DIR}/{filename}.png")
 
 
 if __name__ == "__main__":
@@ -85,14 +140,16 @@ if __name__ == "__main__":
     def test_clients():
         min_clients, max_clients = 1, 10
         n_reads, n_writes, n_entires = 10, 10, 5
-
         clients = np.arange(min_clients, max_clients + 1)
-        results = []
-        for n_clients in tqdm.tqdm(clients):
-            result = run_experiment(
-                n_clients, n_entires, n_reads, n_writes, max_time_ms
-            )
-            results.append(result)
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/clients.txt", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(n_clients, n_entires, n_reads, n_writes, max_time_ms)
+                for n_clients in tqdm(list(clients))
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/clients.txt", "wb"))
 
         avrg_client_success_rate = []
         for result in results:
@@ -101,72 +158,42 @@ if __name__ == "__main__":
                 success_rate.append(client.success_rate)
             avrg_client_success_rate.append(np.mean(success_rate))
 
-        # Plot the results
-        plt.figure()
-        plt.title(
-            f"Average client success rate for {n_reads} reads and {n_writes} writes"
+        plot_experiment(
+            clients,
+            avrg_client_success_rate,
+            title=f"Average client success rate for {n_reads} reads and {n_writes} writes",
+            xlabel="Number of clients",
+            ylabel="Success rate",
+            filename="clients",
         )
-        plt.xlabel("Number of clients")
-        plt.ylabel("Success rate")
-        plt.plot(clients, avrg_client_success_rate)
-        plt.savefig(f"{PLOT_DIR}/clients_avg.png")
 
-    # test_clients()
+    test_clients()
 
     def test_clients_comprehensive():
         min_clients, max_clients = 1, 10
         clients = np.arange(min_clients, max_clients + 1)
         n_reads, n_writes, n_entires = 10, 10, 5
 
-        success_rates: list[tuple[int, float]] = []
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/clients_comprehensive.txt", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(n_clients, n_entires, n_reads, n_writes, max_time_ms)
+                for n_clients in tqdm(list(chain(clients * n_exprs)))
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/clients_comprehensive.txt", "wb"))
 
-        if os.path.exists(f"{DATA_DIR}/clients_comprehensive.txt"):
-            with open(f"{DATA_DIR}/clients_comprehensive.txt", "r") as f:
-                for line in f:
-                    n_clients, success_rate = line.split(",")
-                    success_rates.append((int(n_clients), float(success_rate)))
-        else:
-            for _ in range(n_exprs):
-                for n_clients in tqdm.tqdm(clients):
-                    result = run_experiment(
-                        n_clients, n_entires, n_reads, n_writes, max_time_ms
-                    )
-                    for c in result.clients:
-                        success_rates.append((n_clients, c.success_rate))
+        data = [[c.success_rate for c in r.clients] for r in results]
+        xs = clients
 
-        # store results
-        with open(f"{DATA_DIR}/clients_comprehensive.txt", "w") as f:
-            for n_clients, success_rate in success_rates:
-                f.write(f"{n_clients},{success_rate}\n")
-
-        success_rates_dict = {n_clients: [] for n_clients in clients}
-        for n_clients, success_rate in success_rates:
-            success_rates_dict[n_clients].append(success_rate)
-
-        means = [np.mean(success_rates_dict[n_clients]) for n_clients in clients]
-        standard_derivations = [
-            np.sqrt(np.var(success_rates_dict[n_clients])) for n_clients in clients
-        ]
-
-        # Plot the results
-        plt.figure()
-        plt.title(
-            f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs"
+        plot_multistep_experiment(
+            xs,
+            data,
+            title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Number of clients",
+            ylabel="Success rate",
+            filename="clients_comprehensive",
         )
-        plt.xlabel("Number of clients")
-        plt.ylabel("Success rate")
-        plt.scatter(*zip(*success_rates), marker="x", s=2)
-        plt.plot(clients, means, label="mean")
-        plt.fill_between(
-            clients,
-            np.array(means) - np.array(standard_derivations),
-            np.array(means) + np.array(standard_derivations),
-            alpha=0.5,
-            label="standard derivation",
-        )
-        plt.legend()
-        plt.savefig(f"{PLOT_DIR}/clients_comprehensive.png")
-        plt.show()
 
     test_clients_comprehensive()
 
