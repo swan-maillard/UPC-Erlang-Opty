@@ -3,6 +3,7 @@
 # Runs experiments with different parameters and parses the output of the erl program
 
 from collections import defaultdict
+from typing import Callable
 import os
 import subprocess
 from itertools import chain
@@ -39,6 +40,17 @@ class Result:
     clients: list[ClientResult]
 
 
+def collect_data(
+    key_func: Callable[[Result], float],
+    data_func: Callable[[ClientResult], float],
+    results: list[Result],
+) -> dict[float, list[float]]:
+    data = defaultdict(list)
+    for r in results:
+        data[key_func(r)].extend([data_func(c) for c in r.clients])
+    return data
+
+
 def _run_erl(
     n_clients: int, n_entries: int, n_reads: int, n_writes: int, max_time_ms: int
 ):
@@ -73,6 +85,9 @@ def run_experiment(
         n_reads (int): Number of read operations per transaction
         n_writes (int): Number of write operations per transaction
         max_time (int): Duration of the experiment (in secs)
+
+    Returns:
+        Result: The result of the experiment. Containts list of ClientResult objects for every client in the system
     """
 
     output = _run_erl(n_clients, n_entries, n_reads, n_writes, max_time_ms)
@@ -97,22 +112,28 @@ def plot_experiment(
 
 
 def plot_multistep_experiment(
-    xs: list[float],
-    data: list[list[float]],
+    data: dict[float, list[float]],
     title: str,
     xlabel: str,
     ylabel: str,
     filename: str,
 ):
-    means = [np.mean(d) for d in data]
-    standard_derivations = [np.sqrt(np.var(d)) for d in data]
+    data: list[tuple[float, list[float]]] = [(x, y) for x, y in data.items()]
+    data.sort(key=lambda x: x[0])
+
+    xs = [x for x, _ in data]
+    y_datas = [y for _, y in data]
+
+    means = [np.mean(d) for d in y_datas]
+    standard_derivations = [np.sqrt(np.var(d)) for d in y_datas]
+
     plt.figure()
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.scatter(
-        list(chain(*[[xs[i] for _ in d] for (i, d) in enumerate(data)])),
-        list(chain(*data)),
+        list(chain(*[[x] * len(y_data) for x, y_data in data])),
+        list(chain(*y_datas)),
         marker="x",
         s=2,
     )
@@ -139,29 +160,26 @@ if __name__ == "__main__":
     # 1. Different number of concurrent clients in the system
     def test_clients():
         min_clients, max_clients = 1, 10
-        n_reads, n_writes, n_entires = 10, 10, 5
         clients = np.arange(min_clients, max_clients + 1)
+        n_reads, n_writes, n_entires = 10, 10, 5
+        experiments = list(chain(list(clients) * n_exprs))
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/clients.txt", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/clients", "rb"))
         except FileNotFoundError:
             results = [
                 run_experiment(n_clients, n_entires, n_reads, n_writes, max_time_ms)
-                for n_clients in tqdm(list(clients))
+                for n_clients in tqdm(experiments)
             ]
-            pickle.dump(results, open(f"{DATA_DIR}/clients.txt", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/clients", "wb"))
 
-        avrg_client_success_rate = []
-        for result in results:
-            success_rate = []
-            for client in result.clients:
-                success_rate.append(client.success_rate)
-            avrg_client_success_rate.append(np.mean(success_rate))
+        data = defaultdict(list)
+        for r in results:
+            data[r.n_clients].extend([c.success_rate for c in r.clients])
 
-        plot_experiment(
-            clients,
-            avrg_client_success_rate,
-            title=f"Average client success rate for {n_reads} reads and {n_writes} writes",
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Number of clients",
             ylabel="Success rate",
             filename="clients",
@@ -169,54 +187,165 @@ if __name__ == "__main__":
 
     test_clients()
 
-    def test_clients_comprehensive():
-        min_clients, max_clients = 1, 10
-        clients = np.arange(min_clients, max_clients + 1)
-        n_reads, n_writes, n_entires = 10, 10, 5
-
-        try:
-            results = pickle.load(open(f"{DATA_DIR}/clients_comprehensive.txt", "rb"))
-        except FileNotFoundError:
-            results = [
-                run_experiment(n_clients, n_entires, n_reads, n_writes, max_time_ms)
-                for n_clients in tqdm(list(chain(clients * n_exprs)))
-            ]
-            pickle.dump(results, open(f"{DATA_DIR}/clients_comprehensive.txt", "wb"))
-
-        data = [[c.success_rate for c in r.clients] for r in results]
-        xs = clients
-
-        plot_multistep_experiment(
-            xs,
-            data,
-            title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
-            xlabel="Number of clients",
-            ylabel="Success rate",
-            filename="clients_comprehensive",
-        )
-
-    test_clients_comprehensive()
-
     # 2. Different number of entries in the store
     def test_entries():
-        pass
+        min_entries, max_entries = 1, 10
+        n_clients, n_reads, n_writes = 5, 10, 10
+        entries = np.arange(min_entries, max_entries + 1)
+        experiments = list(chain(list(entries) * n_exprs))
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/entries", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
+                for n_entries in tqdm(experiments)
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/entries", "wb"))
+
+        data = collect_data(
+            lambda r: r.n_entries,
+            lambda c: c.success_rate,
+            results,
+        )
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Number of entries",
+            ylabel="Success rate",
+            filename="entries",
+        )
+
+    test_entries()
 
     # 3. Different number of read operations per transaction
     def test_read_operations():
-        pass
+        min_reads, max_reads = 1, 10
+        n_clients, n_writes, n_entries = 5, 5, 5
+        reads = np.arange(min_reads, max_reads + 1)
+        experiments = list(chain(list(reads) * n_exprs))
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/reads", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
+                for n_reads in tqdm(experiments)
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/reads", "wb"))
+
+        data = collect_data(
+            lambda r: r.n_reads,
+            lambda c: c.success_rate,
+            results,
+        )
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Number of reads",
+            ylabel="Success rate",
+            filename="reads",
+        )
+
+    test_read_operations()
 
     # 4. Different number of write operations per transaction
     def test_write_operations():
-        pass
+        min_writes, max_writes = 1, 10
+        n_clients, n_reads, n_entries = 5, 5, 5
+        writes = np.arange(min_writes, max_writes + 1)
+        experiments = list(chain(list(writes) * n_exprs))
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/writes", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
+                for n_writes in tqdm(experiments)
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/writes", "wb"))
+
+        data = collect_data(
+            lambda r: r.n_writes,
+            lambda c: c.success_rate,
+            results,
+        )
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {n_reads} reads\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Number of writes",
+            ylabel="Success rate",
+            filename="writes",
+        )
+
+    test_write_operations()
 
     # 5. Different ratio of read and write operations for a fixed amount of operations per transaction
     #    (including special cases having only read or write operations)
     def test_read_write_ratio():
-        pass
+        min_ratio, max_ratio = 0, 1
+        total_operations = 20
+        n_clients, n_entries = 5, 5
+        ratios = list(np.linspace(min_ratio, max_ratio, 10))
+        experiments = list(chain(list(ratios) * n_exprs))
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/read_write_ratio", "rb"))
+        except FileNotFoundError:
+            results = []
+            for ratio in tqdm(experiments):
+                n_reads = int(total_operations * ratio)
+                n_writes = int(total_operations * (1 - ratio))
+                if n_reads + n_writes < total_operations:
+                    n_reads += 1
+                assert n_reads + n_writes == total_operations
+                results.append(
+                    (
+                        ratio,
+                        run_experiment(
+                            n_clients,
+                            n_entries,
+                            n_reads,
+                            n_writes,
+                            max_time_ms,
+                        ),
+                    )
+                )
+            pickle.dump(results, open(f"{DATA_DIR}/read_write_ratio", "wb"))
+
+        data = defaultdict(list)
+        for ratio, r in results:
+            data[ratio].extend([c.success_rate for c in r.clients])
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {total_operations} operations\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Read/Write ratio",
+            ylabel="Success rate",
+            filename="read_write_ratio",
+        )
+
+        del data[0]
+        del data[ratios[-1]]
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {total_operations} operations\nruntime:{max_time_ms}ms and {n_exprs} runs. Magnified.",
+            xlabel="Read/Write ratio",
+            ylabel="Success rate",
+            filename="read_write_ratio_magnified",
+        )
+
+    test_read_write_ratio()
 
     # 6. Different percentage of accessed entries with respect to the total number of entries
     #    (each client accesses a randomly generated subset of the store: the number of entries in each subset
     #    should be the same for all the clients, but the subsets should be different per client and should
     #    not contain necessarily contiguous entries)
     def test_accessed_entries():
+        # TODO: modify the client.erl to make this possible
+        # Add a new parameter to the start function that specifies the number of entries to access. -1 means all entries (normal behavior)
         pass
