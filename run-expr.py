@@ -125,7 +125,7 @@ def plot_multistep_experiment(
     y_datas = [y for _, y in data]
 
     means = [np.mean(d) for d in y_datas]
-    standard_derivations = [np.sqrt(np.var(d)) for d in y_datas]
+    standard_deviations = [np.sqrt(np.var(d)) for d in y_datas]
 
     plt.figure()
     plt.title(title)
@@ -140,10 +140,10 @@ def plot_multistep_experiment(
     plt.plot(xs, means, label="mean")
     plt.fill_between(
         xs,
-        np.array(means) - np.array(standard_derivations),
-        np.array(means) + np.array(standard_derivations),
+        np.array(means) - np.array(standard_deviations),
+        np.array(means) + np.array(standard_deviations),
         alpha=0.5,
-        label="standard derivation",
+        label="standard deviation",
     )
     plt.legend()
     plt.savefig(f"{PLOT_DIR}/{filename}.png")
