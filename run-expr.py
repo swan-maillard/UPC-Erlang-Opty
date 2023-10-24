@@ -165,7 +165,7 @@ def plot_multistep_experiment(
 
 
 if __name__ == "__main__":
-    n_exprs = 2
+    n_exprs = 5
     max_time_ms = 100
 
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -417,10 +417,10 @@ if __name__ == "__main__":
         )
         plt.show()
 
-    # test_entries()
-    # test_clients()
-    # test_read_operations()
-    # test_write_operations()
-    # test_read_write_ratio()
+    test_entries()
+    test_clients()
+    test_read_operations()
+    test_write_operations()
+    test_read_write_ratio()
 
     test_accessed_entries()
