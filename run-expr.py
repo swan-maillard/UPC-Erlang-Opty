@@ -178,15 +178,16 @@ if __name__ == "__main__":
         clients = np.arange(min_clients, max_clients + 1)
         n_reads, n_writes, n_entires = 10, 10, 5
         experiments = list(chain(list(clients) * n_exprs))
+        filename = f"clients_min{min_clients}-max{max_clients}-nr{n_reads}-nw{n_writes}-ne{n_entires}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/clients", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
         except FileNotFoundError:
             results = [
                 run_experiment(n_clients, n_entires, n_reads, n_writes, max_time_ms)
                 for n_clients in tqdm(experiments)
             ]
-            pickle.dump(results, open(f"{DATA_DIR}/clients", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
 
         data = defaultdict(list)
         for r in results:
@@ -197,7 +198,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Number of clients",
             ylabel="Success rate",
-            filename="clients",
+            filename=filename,
         )
 
     # 2. Different number of entries in the store
@@ -206,15 +207,16 @@ if __name__ == "__main__":
         n_clients, n_reads, n_writes = 5, 10, 10
         entries = np.arange(min_entries, max_entries + 1)
         experiments = list(chain(list(entries) * n_exprs))
+        filename = f"entries_min{min_entries}-max{max_entries}-nc{n_clients}-nr{n_reads}-nw{n_writes}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/entries", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
         except FileNotFoundError:
             results = [
                 run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
                 for n_entries in tqdm(experiments)
             ]
-            pickle.dump(results, open(f"{DATA_DIR}/entries", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
 
         data = collect_data(
             lambda r: r.n_entries,
@@ -227,7 +229,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_reads} reads and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Number of entries",
             ylabel="Success rate",
-            filename="entries",
+            filename=filename,
         )
 
     # 3. Different number of read operations per transaction
@@ -236,15 +238,16 @@ if __name__ == "__main__":
         n_clients, n_writes, n_entries = 5, 5, 5
         reads = np.arange(min_reads, max_reads + 1)
         experiments = list(chain(list(reads) * n_exprs))
+        filename = f"reads_min{min_reads}-max{max_reads}-nc{n_clients}-nw{n_writes}-ne{n_entries}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/reads", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
         except FileNotFoundError:
             results = [
                 run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
                 for n_reads in tqdm(experiments)
             ]
-            pickle.dump(results, open(f"{DATA_DIR}/reads", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
 
         data = collect_data(
             lambda r: r.n_reads,
@@ -257,7 +260,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_clients} clients and {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Number of reads",
             ylabel="Success rate",
-            filename="reads",
+            filename=filename,
         )
 
     # 4. Different number of write operations per transaction
@@ -266,15 +269,16 @@ if __name__ == "__main__":
         n_clients, n_reads, n_entries = 5, 5, 5
         writes = np.arange(min_writes, max_writes + 1)
         experiments = list(chain(list(writes) * n_exprs))
+        filename = f"writes_min{min_writes}-max{max_writes}-nc{n_clients}-nr{n_reads}-ne{n_entries}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/writes", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
         except FileNotFoundError:
             results = [
                 run_experiment(n_clients, n_entries, n_reads, n_writes, max_time_ms)
                 for n_writes in tqdm(experiments)
             ]
-            pickle.dump(results, open(f"{DATA_DIR}/writes", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
 
         data = collect_data(
             lambda r: r.n_writes,
@@ -287,7 +291,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_clients} clients and {n_reads} reads\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Number of writes",
             ylabel="Success rate",
-            filename="writes",
+            filename=filename,
         )
 
     # 5. Different ratio of read and write operations for a fixed amount of operations per transaction
@@ -298,9 +302,10 @@ if __name__ == "__main__":
         n_clients, n_entries = 5, 5
         ratios = list(np.linspace(min_ratio, max_ratio, 10))
         experiments = list(chain(list(ratios) * n_exprs))
+        filename = f"ratios_min{min_ratio}-max{max_ratio}-total{total_operations}-nc{n_clients}-ne{n_entries}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
-            results = pickle.load(open(f"{DATA_DIR}/read_write_ratio", "rb"))
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
         except FileNotFoundError:
             results = []
             for ratio in tqdm(experiments):
@@ -321,7 +326,7 @@ if __name__ == "__main__":
                         ),
                     )
                 )
-            pickle.dump(results, open(f"{DATA_DIR}/read_write_ratio", "wb"))
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
 
         data = defaultdict(list)
         for ratio, r in results:
@@ -332,7 +337,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_clients} clients and {total_operations} operations\nruntime:{max_time_ms}ms and {n_exprs} runs",
             xlabel="Read/Write ratio",
             ylabel="Success rate",
-            filename="read_write_ratio",
+            filename=filename,
         )
 
         del data[0]
@@ -343,7 +348,7 @@ if __name__ == "__main__":
             title=f"Scatter plot of client success rate for {n_clients} clients and {total_operations} operations\nruntime:{max_time_ms}ms and {n_exprs} runs. Magnified.",
             xlabel="Read/Write ratio",
             ylabel="Success rate",
-            filename="read_write_ratio_magnified",
+            filename=f"{filename}_magnified",
         )
 
     # 6. Different percentage of accessed entries with respect to the total number of entries
@@ -355,7 +360,6 @@ if __name__ == "__main__":
         n_clients, n_reads, n_writes = 5, 10, 10
         subsets = np.arange(min_subset, max_subset + 1, 10)
         experiments = list(chain(list(subsets) * n_exprs))
-
         filename = f"subset_minss{min_subset}-maxss{max_subset}-nc{n_clients}-nr{n_reads}-nw{n_writes}-nt{n_exprs}-rt{max_time_ms}ms"
 
         try:
