@@ -1,9 +1,10 @@
 -module(client).
--export([start/5]).
+-export([start/6]).
 
 
-start(ClientID, Entries, Reads, Writes, Server) ->
-    spawn(fun() -> open(ClientID, Entries, Reads, Writes, Server, 0, 0) end).
+start(ClientID, Entries, Reads, Writes, Server, NSubSet) ->
+    Subset = lists:sublist([ X || {_, X} <- lists:sort([ {rand:uniform(), E} || E <- lists:seq(1, Entries) ]) ], NSubSet),
+    spawn(fun() -> open(ClientID, Subset, Reads, Writes, Server, 0, 0) end).
 
 
 open(ClientID, Entries, Reads, Writes, Server, Total, Ok) ->
@@ -47,7 +48,7 @@ do_transaction(ClientID, Entries, Reads, Writes, Handler) ->
 
 do_read(Entries, Handler) ->
     Ref = make_ref(),
-    Num = rand:uniform(Entries),
+    Num = lists:nth(rand:uniform(length(Entries)), Entries),
     Handler ! {read, Ref, Num},
     receive
         {value, Ref, Value} -> Value
@@ -55,7 +56,7 @@ do_read(Entries, Handler) ->
 
 
 do_write(Entries, Handler, Value) ->
-    Num = rand:uniform(Entries),
+    Num = lists:nth(rand:uniform(length(Entries)), Entries),
     Handler ! {write, Num, Value}.
 
 
