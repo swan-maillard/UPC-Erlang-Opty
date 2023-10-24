@@ -351,14 +351,43 @@ if __name__ == "__main__":
             filename=f"{filename}_magnified",
         )
 
-    # 6. Different percentage of accessed entries with respect to the total number of entries
-    #    (each client accesses a randomly generated subset of the store: the number of entries in each subset
-    #    should be the same for all the clients, but the subsets should be different per client and should
-    #    not contain necessarily contiguous entries)
     def test_accessed_entries():
-        min_subset, max_subset = 1, 100
-        n_clients, n_reads, n_writes = 5, 10, 10
-        subsets = np.arange(min_subset, max_subset + 1, 10)
+        min_subset, max_subset = 1, 20
+        n_clients, n_reads, n_writes = 20, 50, 50
+        subsets = np.arange(min_subset, max_subset + 1, 2)
+        experiments = list(chain(list(subsets) * n_exprs))
+        filename = f"subset_minss{min_subset}-maxss{max_subset}-nc{n_clients}-nr{n_reads}-nw{n_writes}-nt{n_exprs}-rt{max_time_ms}ms"
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(
+                    n_clients, max_subset, n_reads, n_writes, n_subset, max_time_ms
+                )
+                for n_subset in tqdm(experiments)
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
+
+        data = collect_data(
+            lambda r: r.n_subset,
+            lambda c: c.success_rate,
+            results,
+        )
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {n_reads} reads, {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Size of the subset",
+            ylabel="Success rate",
+            filename=filename,
+        )
+        plt.show()
+
+    def test_accessed_entries_multiple_nclients():
+        min_subset, max_subset = 1, 20
+        n_clients, n_reads, n_writes = 20, 50, 50
+        subsets = np.arange(min_subset, max_subset + 1, 2)
         experiments = list(chain(list(subsets) * n_exprs))
         filename = f"subset_minss{min_subset}-maxss{max_subset}-nc{n_clients}-nr{n_reads}-nw{n_writes}-nt{n_exprs}-rt{max_time_ms}ms"
 
