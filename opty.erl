@@ -1,5 +1,5 @@
 -module(opty).
--export([start/5, stop/1]).
+-export([start/6, stop/1]).
 
 %% Clients: Number of concurrent clients in the system
 %% Entries: Number of entries in the store
@@ -8,9 +8,9 @@
 %% Time: Duration of the experiment (in secs)
 
 
-start(Clients, Entries, Reads, Writes, Time) ->
+start(Clients, Entries, Reads, Writes, Time, NSubSet) ->
     register(s, server:start(Entries)),
-    L = startClients(Clients, [], Entries, Reads, Writes),
+    L = startClients(Clients, [], Entries, Reads, Writes, NSubSet),
     io:format("Starting: ~w CLIENTS, ~w ENTRIES, ~w RDxTR, ~w WRxTR, DURATION ~w s~n",
               [Clients, Entries, Reads, Writes, Time]),
     timer:sleep(Time),
@@ -25,10 +25,10 @@ stop(L) ->
     io:format("Stopped~n").
 
 
-startClients(0, L, _, _, _) -> L;
-startClients(Clients, L, Entries, Reads, Writes) ->
-    Pid = client:start(Clients, Entries, Reads, Writes, s),
-    startClients(Clients - 1, [Pid | L], Entries, Reads, Writes).
+startClients(0, L, _, _, _, _) -> L;
+startClients(Clients, L, Entries, Reads, Writes, NSubSet) ->
+    Pid = client:start(Clients, Entries, Reads, Writes, s, NSubSet),
+    startClients(Clients - 1, [Pid | L], Entries, Reads, Writes, NSubSet).
 
 
 stopClients([]) ->

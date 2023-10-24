@@ -36,6 +36,7 @@ class Result:
     n_entries: int
     n_reads: int
     n_writes: int
+    n_subset: int
     max_time: int
     clients: list[ClientResult]
 
@@ -52,9 +53,14 @@ def collect_data(
 
 
 def _run_erl(
-    n_clients: int, n_entries: int, n_reads: int, n_writes: int, max_time_ms: int
+    n_clients: int,
+    n_entries: int,
+    n_reads: int,
+    n_writes: int,
+    max_time_ms: int,
+    n_subset: int,
 ):
-    cmd = f'erl -noshell -eval "opty:start({n_clients}, {n_entries}, {n_reads}, {n_writes}, {max_time_ms})." -s init stop'
+    cmd = f'erl -noshell -eval "opty:start({n_clients}, {n_entries}, {n_reads}, {n_writes}, {max_time_ms}, {n_subset})." -s init stop'
     out = subprocess.check_output(cmd, shell=True)
     return out.decode("utf-8")
 
@@ -75,7 +81,12 @@ def _parse_erl_output(output: str) -> list[ClientResult]:
 
 
 def run_experiment(
-    n_clients: int, n_entries: int, n_reads: int, n_writes: int, max_time_ms: int
+    n_clients: int,
+    n_entries: int,
+    n_reads: int,
+    n_writes: int,
+    n_subset: int = 0,
+    max_time_ms: int = 100,
 ) -> Result:
     """Run the experiment.
 
@@ -90,9 +101,13 @@ def run_experiment(
         Result: The result of the experiment. Containts list of ClientResult objects for every client in the system
     """
 
-    output = _run_erl(n_clients, n_entries, n_reads, n_writes, max_time_ms)
+    if not n_subset:
+        n_subset = n_entries
+    output = _run_erl(n_clients, n_entries, n_reads, n_writes, max_time_ms, n_subset)
     clients = _parse_erl_output(output)
-    return Result(n_clients, n_entries, n_reads, n_writes, max_time_ms, clients)
+    return Result(
+        n_clients, n_entries, n_reads, n_writes, n_subset, max_time_ms, clients
+    )
 
 
 def plot_experiment(
@@ -150,7 +165,7 @@ def plot_multistep_experiment(
 
 
 if __name__ == "__main__":
-    n_exprs = 5
+    n_exprs = 2
     max_time_ms = 100
 
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -185,8 +200,6 @@ if __name__ == "__main__":
             filename="clients",
         )
 
-    test_clients()
-
     # 2. Different number of entries in the store
     def test_entries():
         min_entries, max_entries = 1, 10
@@ -216,8 +229,6 @@ if __name__ == "__main__":
             ylabel="Success rate",
             filename="entries",
         )
-
-    test_entries()
 
     # 3. Different number of read operations per transaction
     def test_read_operations():
@@ -249,8 +260,6 @@ if __name__ == "__main__":
             filename="reads",
         )
 
-    test_read_operations()
-
     # 4. Different number of write operations per transaction
     def test_write_operations():
         min_writes, max_writes = 1, 10
@@ -280,8 +289,6 @@ if __name__ == "__main__":
             ylabel="Success rate",
             filename="writes",
         )
-
-    test_write_operations()
 
     # 5. Different ratio of read and write operations for a fixed amount of operations per transaction
     #    (including special cases having only read or write operations)
@@ -339,13 +346,48 @@ if __name__ == "__main__":
             filename="read_write_ratio_magnified",
         )
 
-    test_read_write_ratio()
-
     # 6. Different percentage of accessed entries with respect to the total number of entries
     #    (each client accesses a randomly generated subset of the store: the number of entries in each subset
     #    should be the same for all the clients, but the subsets should be different per client and should
     #    not contain necessarily contiguous entries)
     def test_accessed_entries():
-        # TODO: modify the client.erl to make this possible
-        # Add a new parameter to the start function that specifies the number of entries to access. -1 means all entries (normal behavior)
-        pass
+        min_subset, max_subset = 1, 100
+        n_clients, n_reads, n_writes = 5, 10, 10
+        subsets = np.arange(min_subset, max_subset + 1, 10)
+        experiments = list(chain(list(subsets) * n_exprs))
+
+        filename = f"subset_minss{min_subset}-maxss{max_subset}-nc{n_clients}-nr{n_reads}-nw{n_writes}-nt{n_exprs}-rt{max_time_ms}ms"
+
+        try:
+            results = pickle.load(open(f"{DATA_DIR}/{filename}", "rb"))
+        except FileNotFoundError:
+            results = [
+                run_experiment(
+                    n_clients, max_subset, n_reads, n_writes, n_subset, max_time_ms
+                )
+                for n_subset in tqdm(experiments)
+            ]
+            pickle.dump(results, open(f"{DATA_DIR}/{filename}", "wb"))
+
+        data = collect_data(
+            lambda r: r.n_subset,
+            lambda c: c.success_rate,
+            results,
+        )
+
+        plot_multistep_experiment(
+            data,
+            title=f"Scatter plot of client success rate for {n_clients} clients and {n_reads} reads, {n_writes} writes\nruntime:{max_time_ms}ms and {n_exprs} runs",
+            xlabel="Size of the subset",
+            ylabel="Success rate",
+            filename=filename,
+        )
+        plt.show()
+
+    # test_entries()
+    # test_clients()
+    # test_read_operations()
+    # test_write_operations()
+    # test_read_write_ratio()
+
+    test_accessed_entries()
