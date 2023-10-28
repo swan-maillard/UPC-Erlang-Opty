@@ -1,15 +1,18 @@
 -module(handler).
 -export([start/3]).
 
+
 start(Client, Validator, Store) ->
     spawn_link(fun() -> init(Client, Validator, Store) end).
+
 
 init(Client, Validator, Store) ->
     handler(Client, Validator, Store, [], []).
 
+
 % Reads: [{Entry, Time}]
 % Writes: [{N, Entry, Value}]
-handler(Client, Validator, Store, Reads, Writes) ->         
+handler(Client, Validator, Store, Reads, Writes) ->
     receive
         {read, Ref, N} ->
             case lists:keyfind(N, 1, Writes) of
