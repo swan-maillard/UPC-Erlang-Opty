@@ -18,10 +18,8 @@ open(ClientID, Entries, Reads, Writes, Server, Total, Ok) ->
             Handler = handler:start(self(), Validator, Store),
             case do_transaction(ClientID, Entries, Reads, Writes, Handler) of
                 ok ->
-                    Handler ! {transaction_done},
                     open(ClientID, Entries, Reads, Writes, Server, Total + 1, Ok + 1);
                 abort ->
-                    Handler ! {transaction_done},
                     open(ClientID, Entries, Reads, Writes, Server, Total + 1, Ok)
             end
     end.

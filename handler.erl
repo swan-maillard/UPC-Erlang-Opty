@@ -33,11 +33,6 @@ handler(Client, Validator, Store, Reads, Writes, TRef) ->
             handler(Client, Validator, Store, Reads, Added, TRef);
         {commit, Ref} ->
             Validator ! {validate, Ref, Reads, Writes, Client, TRef};
-        {transaction_done} ->
-            lists:foreach(fun({_, Entry, _}) ->
-                                  Entry ! {remove, TRef}
-                          end,
-                          Reads);
         abort ->
             ok
     end.

@@ -12,7 +12,7 @@ init() ->
 
 validator() ->
     receive
-        {validate, Ref, _, Writes, Client, TRef} ->
+        {validate, Ref, Reads, Writes, Client, TRef} ->
             Tag = make_ref(),
             send_write_checks(Writes, Tag, TRef),
             % check reads just counts the number of ok answers so it can be used
@@ -20,8 +20,10 @@ validator() ->
             case check_reads(length(Writes), Tag) of
                 ok ->
                     update(Writes),
+                    remove_reads(Reads, TRef),
                     Client ! {Ref, ok};
                 abort ->
+                    remove_reads(Reads, TRef),
                     Client ! {Ref, abort}
             end,
             % send_read_checks(Reads, Tag),
@@ -38,6 +40,13 @@ validator() ->
         _Old ->
             validator()
     end.
+
+
+remove_reads(Reads, TRef) ->
+    lists:foreach(fun({Entry, _}) ->
+                          Entry ! {remove, TRef}
+                  end,
+                  Reads).
 
 
 update(Writes) ->
