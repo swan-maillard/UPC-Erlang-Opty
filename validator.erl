@@ -12,16 +12,26 @@ init() ->
 
 validator() ->
     receive
-        {validate, Ref, Reads, Writes, Client} ->
+        {validate, Ref, _, Writes, Client, TRef} ->
             Tag = make_ref(),
-            send_read_checks(Reads, Tag),
-            case check_reads(length(Reads), Tag) of
+            send_write_checks(Writes, Tag, TRef),
+            % check reads just counts the number of ok answers so it can be used
+            % here as well
+            case check_reads(length(Writes), Tag) of
                 ok ->
                     update(Writes),
                     Client ! {Ref, ok};
                 abort ->
                     Client ! {Ref, abort}
             end,
+            % send_read_checks(Reads, Tag),
+            %% case check_reads(length(Reads), Tag) of
+            %%     ok ->
+            %%         update(Writes),
+            %%         Client ! {Ref, ok};
+            %%     abort ->
+            %%         Client ! {Ref, abort}
+            %% end,
             validator();
         stop ->
             ok;
@@ -37,12 +47,20 @@ update(Writes) ->
                   Writes).
 
 
-send_read_checks(Reads, Tag) ->
+%% send_read_checks(Reads, Tag) ->
+%%     Self = self(),
+%%     lists:foreach(fun({Entry, Time, _}) ->
+%%                           Entry ! {check, Tag, Time, Self}
+%%                   end,
+%%                   Reads).
+
+
+send_write_checks(Writes, Tag, TRef) ->
     Self = self(),
-    lists:foreach(fun({Entry, Time}) ->
-                          Entry ! {check, Tag, Time, Self}
+    lists:foreach(fun({_, Entry, Value}) ->
+                          Entry ! {forward_check, Tag, Value, Self, TRef}
                   end,
-                  Reads).
+                  Writes).
 
 
 check_reads(0, _) ->
