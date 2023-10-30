@@ -150,7 +150,7 @@ def plot_multistep_experiment(
 
 
 if __name__ == "__main__":
-    n_exprs = 1
+    n_exprs = 5
     max_time_ms = 100
 
     os.makedirs(DATA_DIR, exist_ok=True)
