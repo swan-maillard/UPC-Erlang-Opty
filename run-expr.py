@@ -384,7 +384,6 @@ if __name__ == "__main__":
         )
         plt.show()
 
-<<<<<<< HEAD
     def test_accessed_entries_multiple_nclients():
         min_subset, max_subset = 1, 20
         n_clients, n_reads, n_writes = 20, 50, 50
@@ -423,12 +422,4 @@ if __name__ == "__main__":
     test_read_operations()
     test_write_operations()
     test_read_write_ratio()
-=======
-    # test_entries()
-    # test_clients()
-    # test_read_operations()
-    # test_write_operations()
-    # test_read_write_ratio()
->>>>>>> 464c18d (Run with different subsets)
-
     test_accessed_entries()
